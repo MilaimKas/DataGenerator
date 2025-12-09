@@ -1,0 +1,10 @@
+numpy>=1.21.0
+
+[dev]
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+[full]
+matplotlib>=3.5.0
+pandas>=1.4.0
+scipy>=1.8.0
