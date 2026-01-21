@@ -198,3 +198,8 @@ gen.plot_dag()
 ## License
 
 MIT
+
+## Next Steps
+
+- Add categorical variable support
+- Add free text variable support    
