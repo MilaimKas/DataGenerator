@@ -32,6 +32,7 @@ class FeatureSpec:
     output_transform: Optional[Union[str, Transform]] = None
 
     def __post_init__(self):
+        """Ensure default weights and transforms for parents are set."""
         if self.parents and not self.parent_weights:
             self.parent_weights = [1.0] * len(self.parents)
         if self.parents and not self.parent_transforms:
@@ -149,7 +150,14 @@ class ClassificationDataGenerator:
         self._spec_lookup = {spec.name: spec for spec in self.feature_specs}
 
     def _calibrate_intercept(self, n_samples: int = 10000):
-        """Auto-calibrate intercept to achieve target class balance in causal mode."""
+        """
+            Auto-calibrate intercept to achieve target class balance in causal mode.
+
+            An interecept is added to the structural equations for Y.
+                η = intercept + Σ(weight_i × transform_i(X_i)) 
+            where η is the linear predictor.
+            We find intercept such that mean(link_function(η)) ≈ class_balance by sampling. 
+        """
         # Generate features without labels to estimate required intercept
         temp_rng = np.random.default_rng(42)  # Fixed seed for calibration
         features = self._generate_features(n_samples, temp_rng)
@@ -157,9 +165,7 @@ class ClassificationDataGenerator:
         # Compute linear predictor (without intercept)
         linear_pred = self._compute_linear_predictor(features, intercept=0.0)
 
-        # Find intercept that gives target class balance
-        # For logistic: P(Y=1) = sigmoid(intercept + linear_pred)
-        # We want mean(P(Y=1)) = class_balance
+        # Find intercept that gives target class balance mean(P(Y=1)) = class_balance
         # Using bisection search
         from scipy.optimize import brentq
 
@@ -220,7 +226,10 @@ class ClassificationDataGenerator:
         features: dict[str, np.ndarray],
         intercept: Optional[float] = None,
     ) -> np.ndarray:
-        """Compute linear predictor for causal mode: intercept + sum(weight * transform(feature))."""
+        """
+            Compute linear predictor for causal mode: η = intercept + Σ(weight_i × transform_i(X_i)).
+            Use to compute probabilities for Y using a link function.
+        """
         if intercept is None:
             intercept = self.intercept or 0.0
 
@@ -240,7 +249,9 @@ class ClassificationDataGenerator:
         return linear_pred
 
     def _apply_link(self, linear_pred: np.ndarray) -> np.ndarray:
-        """Apply link function to get probabilities."""
+        """
+            Apply link function to get probabilities from real numbers.
+        """
         if self.link_function == "logistic":
             return 1.0 / (1.0 + np.exp(-np.clip(linear_pred, -500, 500)))
         elif self.link_function == "probit":

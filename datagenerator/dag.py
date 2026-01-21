@@ -154,7 +154,13 @@ class DAG:
         return self
 
     def _compute_topological_order(self) -> list[str]:
-        """Compute topological ordering using Kahn's algorithm."""
+        """
+            Compute topological ordering using Kahn's algorithm.
+            It:
+                - computes the order in which nodes must be processed (parents before children). Needed for sampling.
+                - detects cycles in the graph.
+                - caches the result for future calls.
+        """
         if self._topological_order is not None:
             return self._topological_order
 
