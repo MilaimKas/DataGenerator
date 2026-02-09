@@ -264,6 +264,39 @@ class DAG:
 
         return "\n".join(lines)
 
+    def show_equations(self) -> str:
+        """Return the structural equations in mathematical notation."""
+        order = self._compute_topological_order()
+        lines = ["Structural Equations:", "=" * 40]
+
+        for name in order:
+            node = self.nodes[name]
+
+            if node.intervened:
+                lines.append(f"{name} = {node.intervention_value}  [intervened]")
+                continue
+
+            incoming_edges = self.edges.get(name, [])
+
+            if not incoming_edges:
+                # Root node: just noise
+                lines.append(f"{name} = {node.noise.math_notation()}")
+            else:
+                # Build equation: sum of parent contributions + noise
+                terms = []
+                for edge in incoming_edges:
+                    transformed = edge.transform.math_notation(edge.source)
+                    if edge.weight == 1.0:
+                        terms.append(transformed)
+                    elif edge.weight == -1.0:
+                        terms.append(f"-{transformed}")
+                    else:
+                        terms.append(f"{edge.weight:.2f} * {transformed}")
+                equation = " + ".join(terms)
+                lines.append(f"{name} = {equation} + {node.noise.math_notation()}")
+
+        return "\n".join(lines)
+
     def plot(self, figsize: tuple[float, float] = (8, 6), show_weights: bool = True):
         """
         Plot the DAG using matplotlib.

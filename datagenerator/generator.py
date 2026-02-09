@@ -105,6 +105,10 @@ class DataGenerator:
                 node.intervened = intervened
                 node.intervention_value = value
 
+    def show_equations(self) -> str:
+        """Return the structural equations in mathematical notation."""
+        return self.dag.show_equations()
+
     def get_column_names(self) -> list[str]:
         """Get column names in the order they appear in sample output."""
         return self.dag._compute_topological_order()

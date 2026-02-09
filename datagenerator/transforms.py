@@ -13,6 +13,10 @@ class Transform:
     def __call__(self, x: np.ndarray) -> np.ndarray:
         raise NotImplementedError
 
+    def math_notation(self, var: str) -> str:
+        """Return mathematical notation for this transform applied to var."""
+        return f"{self.__class__.__name__}({var})"
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
 
@@ -22,6 +26,9 @@ class IdentityTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return x
+
+    def math_notation(self, var: str) -> str:
+        return var
 
 
 @dataclass
@@ -37,6 +44,22 @@ class PolynomialTransform(Transform):
             result += coef * np.power(x, deg)
         return result
 
+    def math_notation(self, var: str) -> str:
+        coeffs = self.coefficients or [1.0] * len(self.degrees)
+        terms = []
+        for deg, coef in zip(self.degrees, coeffs):
+            if deg == 1 and coef == 1.0:
+                terms.append(var)
+            elif deg == 1:
+                terms.append(f"{coef:.2f} * {var}")
+            elif coef == 1.0:
+                terms.append(f"{var}^{deg}")
+            else:
+                terms.append(f"{coef:.2f} * {var}^{deg}")
+        if len(terms) == 1:
+            return terms[0]
+        return "(" + " + ".join(terms) + ")"
+
     def __repr__(self) -> str:
         return f"PolynomialTransform(degrees={self.degrees})"
 
@@ -50,6 +73,14 @@ class SigmoidTransform(Transform):
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-self.scale * (x - self.shift)))
 
+    def math_notation(self, var: str) -> str:
+        if self.scale == 1.0 and self.shift == 0.0:
+            return f"sigmoid({var})"
+        elif self.shift == 0.0:
+            return f"sigmoid({self.scale:.2f} * {var})"
+        else:
+            return f"sigmoid({self.scale:.2f} * ({var} - {self.shift:.2f}))"
+
     def __repr__(self) -> str:
         return f"SigmoidTransform(scale={self.scale})"
 
@@ -61,6 +92,11 @@ class TanhTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return np.tanh(self.scale * x)
+
+    def math_notation(self, var: str) -> str:
+        if self.scale == 1.0:
+            return f"tanh({var})"
+        return f"tanh({self.scale:.2f} * {var})"
 
     def __repr__(self) -> str:
         return f"TanhTransform(scale={self.scale})"
@@ -75,6 +111,19 @@ class SinusoidalTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.amplitude * np.sin(self.frequency * x + self.phase)
+
+    def math_notation(self, var: str) -> str:
+        # Build inner: frequency * var + phase
+        if self.frequency == 1.0:
+            inner = var
+        else:
+            inner = f"{self.frequency:.2f} * {var}"
+        if self.phase != 0.0:
+            inner = f"{inner} + {self.phase:.2f}"
+        # Build outer: amplitude * sin(inner)
+        if self.amplitude == 1.0:
+            return f"sin({inner})"
+        return f"{self.amplitude:.2f} * sin({inner})"
 
     def __repr__(self) -> str:
         return f"SinusoidalTransform(freq={self.frequency})"
@@ -91,6 +140,15 @@ class ExponentialTransform(Transform):
         clipped = np.clip(self.rate * x, -50, 50)
         return self.scale * np.exp(clipped)
 
+    def math_notation(self, var: str) -> str:
+        if self.rate == 1.0:
+            inner = var
+        else:
+            inner = f"{self.rate:.2f} * {var}"
+        if self.scale == 1.0:
+            return f"exp({inner})"
+        return f"{self.scale:.2f} * exp({inner})"
+
     def __repr__(self) -> str:
         return f"ExponentialTransform(rate={self.rate})"
 
@@ -104,6 +162,11 @@ class LogTransform(Transform):
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.scale * np.log(np.abs(x) + self.epsilon)
 
+    def math_notation(self, var: str) -> str:
+        if self.scale == 1.0:
+            return f"log(|{var}|)"
+        return f"{self.scale:.2f} * log(|{var}|)"
+
     def __repr__(self) -> str:
         return f"LogTransform(scale={self.scale})"
 
@@ -115,6 +178,11 @@ class ReLUTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return np.where(x > 0, x, self.negative_slope * x)
+
+    def math_notation(self, var: str) -> str:
+        if self.negative_slope == 0.0:
+            return f"max(0, {var})"
+        return f"leaky_relu({var}, α={self.negative_slope:.2f})"
 
     def __repr__(self) -> str:
         return f"ReLUTransform(negative_slope={self.negative_slope})"
@@ -129,6 +197,9 @@ class ThresholdTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return np.where(x > self.threshold, self.above_value, self.below_value)
+
+    def math_notation(self, var: str) -> str:
+        return f"I({var} > {self.threshold:.2f})"
 
     def __repr__(self) -> str:
         return f"ThresholdTransform(threshold={self.threshold})"
@@ -145,6 +216,12 @@ class CompositeTransform(Transform):
             result = t(result)
         return result
 
+    def math_notation(self, var: str) -> str:
+        result = var
+        for t in self.transforms:
+            result = t.math_notation(result)
+        return result
+
     def __repr__(self) -> str:
         return f"CompositeTransform({self.transforms})"
 
@@ -157,6 +234,9 @@ class CustomTransform(Transform):
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         return self.func(x)
+
+    def math_notation(self, var: str) -> str:
+        return f"{self.name}({var})"
 
     def __repr__(self) -> str:
         return f"CustomTransform({self.name})"

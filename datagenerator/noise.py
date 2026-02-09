@@ -13,6 +13,10 @@ class NoiseGenerator:
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         raise NotImplementedError
 
+    def math_notation(self) -> str:
+        """Return concise mathematical notation for this noise distribution."""
+        return f"ε ~ {self.__class__.__name__}"
+
 
 @dataclass
 class GaussianNoise(NoiseGenerator):
@@ -22,6 +26,9 @@ class GaussianNoise(NoiseGenerator):
 
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         return rng.normal(self.mean, self.std, n)
+
+    def math_notation(self) -> str:
+        return f"ε ~ Gaussian(μ={self.mean}, σ={self.std})"
 
 
 @dataclass
@@ -33,6 +40,9 @@ class UniformNoise(NoiseGenerator):
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         return rng.uniform(self.low, self.high, n)
 
+    def math_notation(self) -> str:
+        return f"ε ~ Uniform({self.low}, {self.high})"
+
 
 @dataclass
 class LaplacianNoise(NoiseGenerator):
@@ -43,6 +53,9 @@ class LaplacianNoise(NoiseGenerator):
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         return rng.laplace(self.loc, self.scale, n)
 
+    def math_notation(self) -> str:
+        return f"ε ~ Laplace(μ={self.loc}, b={self.scale})"
+
 
 @dataclass
 class StudentTNoise(NoiseGenerator):
@@ -52,6 +65,9 @@ class StudentTNoise(NoiseGenerator):
 
     def sample(self, n: int, rng: np.random.Generator) -> np.ndarray:
         return rng.standard_t(self.df, n) * self.scale
+
+    def math_notation(self) -> str:
+        return f"ε ~ StudentT(df={self.df}, σ={self.scale})"
 
 
 @dataclass
@@ -72,3 +88,7 @@ class MixtureNoise(NoiseGenerator):
             if mask.sum() > 0:
                 result[mask] = comp.sample(mask.sum(), rng)
         return result
+
+    def math_notation(self) -> str:
+        comp_strs = [c.math_notation().replace("ε ~ ", "") for c in self.components]
+        return f"ε ~ Mixture({', '.join(comp_strs)})"
