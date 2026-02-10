@@ -6,6 +6,25 @@ import numpy as np
 from typing import Callable, Optional
 from dataclasses import dataclass, field
 
+# list of available transform functions
+transforms_available = [
+    "linear",
+    "identity",
+    "quadratic",
+    "cubic",
+    "polynomial",
+    "sigmoid",
+    "tanh",
+    "sin",
+    "sinusoidal",
+    "exp",
+    "exponential",
+    "log",
+    "relu",
+    "leaky_relu",
+    "threshold",
+    "step"
+]
 
 class Transform:
     """Base class for transformations applied to parent contributions."""

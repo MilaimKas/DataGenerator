@@ -6,7 +6,7 @@ import numpy as np
 from typing import Optional, Union
 
 from .dag import DAG
-from .transforms import Transform
+from .transforms import Transform, get_transform, transforms_available
 
 
 def create_chain(
@@ -223,6 +223,7 @@ def create_random_dag(
     noise_std: float = 1.0,
     seed: Optional[int] = None,
     node_names: Optional[list[str]] = None,
+    use_transform: Optional[bool] = False
 ) -> DAG:
     """
     Create a random DAG with specified number of nodes and edge probability.
@@ -234,6 +235,7 @@ def create_random_dag(
         noise_std: Noise standard deviation for all nodes
         seed: Random seed
         node_names: Custom node names
+        use_transform: True if sample from transform function available list.
 
     Returns:
         Random DAG
@@ -246,11 +248,15 @@ def create_random_dag(
     for name in names:
         dag.add_node(name, noise_std=noise_std)
 
+    # default
+    transform_fct = "linear"
+
     # Only allow edges from earlier to later nodes (ensures acyclicity)
     for i in range(n_nodes):
         for j in range(i + 1, n_nodes):
             if rng.random() < edge_probability:
                 weight = rng.uniform(weight_range[0], weight_range[1])
-                dag.add_edge(names[i], names[j], weight=weight)
-
+                if use_transform:
+                    transform_fct = np.random.choice(transforms_available)
+                dag.add_edge(names[i], names[j], weight=weight, transform=get_transform(transform_fct))
     return dag
