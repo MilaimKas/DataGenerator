@@ -124,6 +124,14 @@ interventional_data = generator.sample_interventional(
     interventions={"X": 2.0},
     return_dict=True
 )
+
+# Also possible with classification data in causal mode
+# be carefull when interpreting the results 
+interventional_data = gen.sample_interventional(
+    n=1000,
+    interventions={"X": 2.0},
+    return_dict=True
+)
 ```
 
 ### Non-linear Transforms
