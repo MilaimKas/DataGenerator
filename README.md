@@ -181,6 +181,10 @@ print(dag.to_ascii())
 # Detailed description
 print(dag.describe())
 
+# display structural equations (both for DataGenerator and ClassificationDataGenerator)
+print(gen.show_equations())
+print(generator.show_equations())
+
 # For ClassificationDataGenerator
 gen.plot_dag()
 ```
