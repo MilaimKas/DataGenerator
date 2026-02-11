@@ -324,6 +324,116 @@ class ClassificationDataGenerator:
 
         return X, y
 
+    def sample_interventional(
+        self,
+        n: int,
+        interventions: dict[str, float],
+        return_dataframe: bool = False,
+        random_state: Optional[int] = None,
+    ) -> Union[tuple[np.ndarray, np.ndarray], "pd.DataFrame"]:
+        """
+        Generate classification data with interventions on features (causal mode only).
+
+        Fixes one or more features to specific values and generates labels
+        using the original intercept and link function. This answers causal
+        questions like "What would the label distribution be if we set f0=2.0?"
+
+        Note: The resulting class balance will differ from the target class_balance,
+        because the intercept was calibrated for the observational distribution.
+        This shift *is* the causal effect of the intervention.
+
+        Args:
+            n: Number of samples to generate
+            interventions: Dict of {feature_name: fixed_value}
+            return_dataframe: If True, return a pandas DataFrame
+            random_state: Override the random state for this batch
+
+        Returns:
+            If return_dataframe=False: tuple (X, y)
+            If return_dataframe=True: DataFrame with features and 'y' column
+
+        Raises:
+            ValueError: If mode is not "causal" or feature name is unknown
+        """
+        if self.mode != "causal":
+            raise ValueError(
+                "sample_interventional() is only supported in causal mode. "
+                "In generative mode, Y is sampled before features, so intervening "
+                "on features does not have a well-defined causal interpretation."
+            )
+
+        for name in interventions:
+            if name not in self._spec_lookup:
+                raise ValueError(f"Unknown feature '{name}'. Available: {list(self._spec_lookup.keys())}")
+
+        warnings.warn(
+            "Interventional sampling uses the intercept calibrated for the "
+            "observational distribution. The resulting class balance will differ "
+            "from the target class_balance — this is expected and reflects the "
+            "causal effect of the intervention.",
+            stacklevel=2,
+        )
+
+        # Save current intervention state on the DAG
+        saved_state = {}
+        for name, value in interventions.items():
+            if name in self.dag.nodes:
+                node = self.dag.nodes[name]
+                saved_state[name] = (node.intervened, node.intervention_value)
+                node.intervened = True
+                node.intervention_value = value
+
+        try:
+            rng = np.random.default_rng(random_state) if random_state is not None else self.rng
+
+            # Generate features (intervened nodes will use fixed values)
+            features = self._generate_features(n, rng, y=None)
+
+            # Override features for nodes that aren't in the DAG
+            # (root nodes with no parents won't be caught by DAG intervention)
+            for name, value in interventions.items():
+                features[name] = np.full(n, value)
+
+            # Compute labels using the original intercept
+            linear_pred = self._compute_linear_predictor(features)
+            probs = self._apply_link(linear_pred)
+            y = rng.binomial(1, probs)
+
+            # Apply label noise if specified
+            if self.label_noise > 0:
+                flip_mask = rng.random(n) < self.label_noise
+                y = np.where(flip_mask, 1 - y, y)
+
+            # Add noise features
+            noise_features = {}
+            for i in range(self.n_noise_features):
+                noise_features[f"noise_{i}"] = rng.normal(0, self.noise_feature_std, n)
+
+            # Combine into feature matrix
+            feature_names = self._feature_order + list(noise_features.keys())
+            X = np.column_stack(
+                [features[name] for name in self._feature_order] +
+                [noise_features[name] for name in noise_features]
+            )
+
+            if return_dataframe:
+                try:
+                    import pandas as pd
+                except ImportError:
+                    raise ImportError("pandas is required for return_dataframe=True")
+                df = pd.DataFrame(X, columns=feature_names)
+                df['y'] = y
+                return df
+
+            return X, y
+
+        finally:
+            # Restore DAG state
+            for name, (intervened, value) in saved_state.items():
+                node = self.dag.nodes[name]
+                node.intervened = intervened
+                node.intervention_value = value
+
     def get_feature_names(self) -> list[str]:
         """Get the names of all features in order."""
         return self._feature_order + [f"noise_{i}" for i in range(self.n_noise_features)]
