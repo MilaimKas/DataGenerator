@@ -52,8 +52,8 @@ python -c "from datagenerator import DAG, DataGenerator; dag = DAG(); dag.add_no
 
 ## Dependencies
 
-- **Required**: `numpy`
-- **Optional**: `matplotlib` (for `DAG.plot()`, `ClassificationDataGenerator.plot_dag()`), `pandas` (for `to_dataframe()`), `scipy` (for `ClassificationDataGenerator` intercept calibration and probit link)
+- **Required**: `numpy`,  `pandas`
+- **Optional**: `matplotlib` (for `DAG.plot()`, `ClassificationDataGenerator.plot_dag()`), `scipy` (for `ClassificationDataGenerator` intercept calibration and probit link)
 
 ## Key Patterns
 
