@@ -11,7 +11,7 @@ from .transforms import Transform, get_transform, transforms_available
 def create_chain(
     n_nodes: int,
     weights: list[float] | None = None,
-    transforms: list[str | Transform] | None = None,
+    transforms: list[str] | list[Transform] | None = None,
     noise_std: float = 1.0,
     names: list[str] | None = None,
 ) -> DAG:
@@ -31,7 +31,8 @@ def create_chain(
     dag = DAG()
     names = names or [f"X{i}" for i in range(n_nodes)]
     weights = weights or [1.0] * (n_nodes - 1)
-    transforms = transforms or ["linear"] * (n_nodes - 1)
+    if transforms is None:
+        transforms = ["linear"] * (n_nodes - 1)
 
     for name in names:
         dag.add_node(name, noise_std=noise_std)
@@ -47,7 +48,7 @@ def create_fork(
     confounder_name: str = "Z",
     child_names: list[str] | None = None,
     weights: list[float] | None = None,
-    transforms: list[str | Transform] | None = None,
+    transforms: list[str] | list[Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
@@ -84,7 +85,7 @@ def create_collider(
     collider_name: str = "Y",
     parent_names: list[str] | None = None,
     weights: list[float] | None = None,
-    transforms: list[str | Transform] | None = None,
+    transforms: list[str] | list[Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
@@ -221,18 +222,14 @@ def create_instrument(
         weight=z_x_weight,
         transform=transforms.get("Z->X", "linear"),
     )
-    dag.add_edge(
-        treatment_name, outcome_name, weight=x_y_weight, transform=transforms.get("X->Y", "linear")
-    )
+    dag.add_edge(treatment_name, outcome_name, weight=x_y_weight, transform=transforms.get("X->Y", "linear"))
     dag.add_edge(
         confounder_name,
         treatment_name,
         weight=u_x_weight,
         transform=transforms.get("U->X", "linear"),
     )
-    dag.add_edge(
-        confounder_name, outcome_name, weight=u_y_weight, transform=transforms.get("U->Y", "linear")
-    )
+    dag.add_edge(confounder_name, outcome_name, weight=u_y_weight, transform=transforms.get("U->Y", "linear"))
 
     return dag
 
@@ -279,7 +276,5 @@ def create_random_dag(
                 weight = rng.uniform(weight_range[0], weight_range[1])
                 if use_transform:
                     transform_fct = np.random.choice(transforms_available)
-                dag.add_edge(
-                    names[i], names[j], weight=weight, transform=get_transform(transform_fct)
-                )
+                dag.add_edge(names[i], names[j], weight=weight, transform=get_transform(transform_fct))
     return dag

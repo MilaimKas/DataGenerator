@@ -115,6 +115,5 @@ class DataGenerator:
 
     def to_dataframe(self, n: int):
         """Sample and return as a pandas DataFrame."""
-
         data = self.sample(n, return_dict=True)
         return pd.DataFrame(data)

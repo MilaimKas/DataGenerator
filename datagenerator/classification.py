@@ -30,7 +30,7 @@ class FeatureSpec:
     # Dependencies on other features
     parents: list[str] = field(default_factory=list)
     parent_weights: list[float] = field(default_factory=list)
-    parent_transforms: list[str | Transform] = field(default_factory=list)
+    parent_transforms: list[str] | list[Transform] = field(default_factory=list)
     # Final transform applied to the feature value
     output_transform: str | Transform | None = None
 
@@ -146,9 +146,7 @@ class ClassificationDataGenerator:
                 if parent not in self.dag.nodes:
                     raise ValueError(f"Feature '{spec.name}' depends on unknown feature '{parent}'")
                 weight = spec.parent_weights[i] if i < len(spec.parent_weights) else 1.0
-                transform = (
-                    spec.parent_transforms[i] if i < len(spec.parent_transforms) else "linear"
-                )
+                transform = spec.parent_transforms[i] if i < len(spec.parent_transforms) else "linear"
                 self.dag.add_edge(parent, spec.name, weight=weight, transform=transform)
 
         self._feature_order = self.dag._compute_topological_order()
@@ -182,8 +180,7 @@ class ClassificationDataGenerator:
             self.intercept = brentq(balance_error, -20, 20)
         except ValueError:
             # If brentq fails, use a reasonable default
-            warnings.warn("Could not calibrate intercept precisely. " \
-                            "Using approximate value.", stacklevel=2)
+            warnings.warn("Could not calibrate intercept precisely. Using approximate value.", stacklevel=2)
             self.intercept = np.log(self.class_balance / (1 - self.class_balance + 1e-10))
 
     def _generate_features(
@@ -232,11 +229,10 @@ class ClassificationDataGenerator:
         features: dict[str, np.ndarray],
         intercept: float | None = None,
     ) -> np.ndarray:
-        """
-        Compute linear predictor for causal mode: η = intercept + Σ(weight_i x transform_i(X_i)).
+        """Compute linear predictor for causal mode: η = intercept + Σ(weight_i x transform_i(X_i)).
+
         Use to compute probabilities for Y using a link function.
         """
-
         if intercept is None:
             intercept = self.intercept or 0.0
 
@@ -312,8 +308,7 @@ class ClassificationDataGenerator:
         # Combine into feature matrix
         feature_names = self._feature_order + list(noise_features.keys())
         X = np.column_stack(
-            [features[name] for name in self._feature_order]
-            + [noise_features[name] for name in noise_features]
+            [features[name] for name in self._feature_order] + [noise_features[name] for name in noise_features]
         )
 
         if return_dataframe:
@@ -363,9 +358,7 @@ class ClassificationDataGenerator:
 
         for name in interventions:
             if name not in self._spec_lookup:
-                raise ValueError(
-                    f"Unknown feature '{name}'. Available: {list(self._spec_lookup.keys())}"
-                )
+                raise ValueError(f"Unknown feature '{name}'. Available: {list(self._spec_lookup.keys())}")
 
         warnings.warn(
             "Interventional sampling uses the intercept calibrated for the "
@@ -413,8 +406,7 @@ class ClassificationDataGenerator:
             # Combine into feature matrix
             feature_names = self._feature_order + list(noise_features.keys())
             X = np.column_stack(
-                [features[name] for name in self._feature_order]
-                + [noise_features[name] for name in noise_features]
+                [features[name] for name in self._feature_order] + [noise_features[name] for name in noise_features]
             )
 
             if return_dataframe:
@@ -542,9 +534,7 @@ class ClassificationDataGenerator:
                     "",
                     xy=(x2, y2),
                     xytext=(x1, y1),
-                    arrowprops=dict(
-                        arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"
-                    ),
+                    arrowprops=dict(arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"),
                 )
                 if show_weights:
                     mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
@@ -615,9 +605,7 @@ class ClassificationDataGenerator:
         x, y = positions[target_name]
         y_circle = Circle((x, y), 0.06, color="gold", ec="darkgoldenrod", lw=3, zorder=10)
         ax.add_patch(y_circle)
-        ax.text(
-            x, y, target_name, ha="center", va="center", fontsize=12, fontweight="bold", zorder=11
-        )
+        ax.text(x, y, target_name, ha="center", va="center", fontsize=12, fontweight="bold", zorder=11)
 
         # Add legend
         legend_elements = [

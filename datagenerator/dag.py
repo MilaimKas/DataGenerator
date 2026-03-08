@@ -59,9 +59,7 @@ class DAG:
     """
 
     def __init__(self):
-        """
-        initialize DAG with nodes and edges dict
-        """
+        """Initialize DAG with nodes and edges dict."""
         self.nodes: dict[str, Node] = {}
         self.edges: dict[str, list[Edge]] = defaultdict(list)  # target -> list of incoming edges
         self._topological_order: list[str] | None = None
@@ -159,15 +157,14 @@ class DAG:
         return self
 
     def _compute_topological_order(self) -> list[str]:
-        """
-        Compute topological ordering using Kahn's algorithm.
+        """Compute topological ordering using Kahn's algorithm.
+
         It:
-            - computes the order in which nodes must be processed (parents before children). 
+            - computes the order in which nodes must be processed (parents before children).
               Needed for sampling.
             - detects cycles in the graph.
             - caches the result for future calls.
         """
-
         if self._topological_order is not None:
             return self._topological_order
 
@@ -263,9 +260,7 @@ class DAG:
                 parent_str = ", ".join(parents)
                 lines.append(f"\n{name} <- {parent_str}")
                 for edge in self.edges[name]:
-                    lines.append(
-                        f"  {edge.source}: weight={edge.weight}, transform={edge.transform}"
-                    )
+                    lines.append(f"  {edge.source}: weight={edge.weight}, transform={edge.transform}")
             else:
                 lines.append(f"\n{name} (root)")
 
@@ -365,9 +360,7 @@ class DAG:
                     "",
                     xy=(x2, y2),
                     xytext=(x1, y1),
-                    arrowprops=dict(
-                        arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"
-                    ),
+                    arrowprops=dict(arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"),
                 )
 
                 # Add weight label

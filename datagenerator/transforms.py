@@ -32,7 +32,7 @@ class Transform:
     """Base class for transformations applied to parent contributions."""
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        """Apply the transformation to input array x. Must be overridden by subclasses. """
+        """Apply the transformation to input array x. Must be overridden by subclasses."""
         raise NotImplementedError
 
     def math_notation(self, var: str) -> str:
@@ -63,7 +63,7 @@ class PolynomialTransform(Transform):
     coefficients: list[float] | None = None
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        """Apply the transformation to input array x."""    
+        """Apply the transformation to input array x."""
         coeffs = self.coefficients or [1.0] * len(self.degrees)
         result = np.zeros_like(x)
         for deg, coef in zip(self.degrees, coeffs, strict=False):
@@ -174,20 +174,20 @@ class ExponentialTransform(Transform):
     rate: float = 1.0
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        """Apply the transformation to input array x."""    
+        """Apply the transformation to input array x."""
         # Clip to avoid overflow
         clipped = np.clip(self.rate * x, -50, 50)
         return self.scale * np.exp(clipped)
 
     def math_notation(self, var: str) -> str:
-        """Return mathematical notation for this transform applied to var."""   
+        """Return mathematical notation for this transform applied to var."""
         inner = var if self.rate == 1.0 else f"{self.rate:.2f} * {var}"
         if self.scale == 1.0:
             return f"exp({inner})"
         return f"{self.scale:.2f} * exp({inner})"
 
     def __repr__(self) -> str:
-        """Return string representation of the transform."""    
+        """Return string representation of the transform."""
         return f"ExponentialTransform(rate={self.rate})"
 
 
@@ -287,9 +287,9 @@ class CustomTransform(Transform):
 
 def get_transform(name: str, **kwargs) -> Transform:
     """Get a transform by name with optional parameters."""
-    transforms = {
-        "linear": IdentityTransform,
-        "identity": IdentityTransform,
+    factories: dict[str, Callable[[], Transform]] = {
+        "linear": lambda: IdentityTransform(),
+        "identity": lambda: IdentityTransform(),
         "quadratic": lambda: PolynomialTransform(degrees=[2]),
         "cubic": lambda: PolynomialTransform(degrees=[3]),
         "polynomial": lambda: PolynomialTransform(**kwargs),
@@ -305,6 +305,6 @@ def get_transform(name: str, **kwargs) -> Transform:
         "threshold": lambda: ThresholdTransform(**kwargs),
         "step": lambda: ThresholdTransform(**kwargs),
     }
-    if name not in transforms:
-        raise ValueError(f"Unknown transform: {name}. Available: {list(transforms.keys())}")
-    return transforms[name]() if callable(transforms[name]) else transforms[name]
+    if name not in factories:
+        raise ValueError(f"Unknown transform: {name}. Available: {list(factories.keys())}")
+    return factories[name]()
