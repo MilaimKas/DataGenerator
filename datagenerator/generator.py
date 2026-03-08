@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from typing import Optional, Union
+import pandas as pd
 
 from .dag import DAG
 
@@ -16,7 +16,7 @@ class DataGenerator:
         X = sum_{P in Pa(X)} [weight_P * transform_P(P)] + noise_X
     """
 
-    def __init__(self, dag: DAG, seed: Optional[int] = None):
+    def __init__(self, dag: DAG, seed: int | None = None):
         """
         Initialize the data generator.
 
@@ -31,7 +31,7 @@ class DataGenerator:
         self,
         n: int,
         return_dict: bool = False,
-    ) -> Union[np.ndarray, dict[str, np.ndarray]]:
+    ) -> np.ndarray | dict[str, np.ndarray]:
         """
         Sample n data points from the DAG.
 
@@ -74,7 +74,7 @@ class DataGenerator:
         n: int,
         interventions: dict[str, float],
         return_dict: bool = False,
-    ) -> Union[np.ndarray, dict[str, np.ndarray]]:
+    ) -> np.ndarray | dict[str, np.ndarray]:
         """
         Sample with temporary interventions (doesn't modify the DAG).
 
@@ -115,10 +115,6 @@ class DataGenerator:
 
     def to_dataframe(self, n: int):
         """Sample and return as a pandas DataFrame."""
-        try:
-            import pandas as pd
-        except ImportError:
-            raise ImportError("pandas is required for to_dataframe()")
 
         data = self.sample(n, return_dict=True)
         return pd.DataFrame(data)

@@ -14,90 +14,85 @@ Example usage:
     >>> data = generator.sample(n=1000)
 """
 
-from .noise import (
-    NoiseGenerator,
-    GaussianNoise,
-    UniformNoise,
-    LaplacianNoise,
-    StudentTNoise,
-    MixtureNoise,
+from .classification import (
+    ClassificationDataGenerator,
+    FeatureSpec,
 )
-
-from .transforms import (
-    Transform,
-    IdentityTransform,
-    PolynomialTransform,
-    SigmoidTransform,
-    TanhTransform,
-    SinusoidalTransform,
-    ExponentialTransform,
-    LogTransform,
-    ReLUTransform,
-    ThresholdTransform,
-    CompositeTransform,
-    CustomTransform,
-    get_transform,
-)
-
 from .dag import (
+    DAG,
     Edge,
     Node,
-    DAG,
 )
-
 from .generator import (
     DataGenerator,
 )
-
-from .classification import (
-    FeatureSpec,
-    ClassificationDataGenerator,
+from .noise import (
+    GaussianNoise,
+    LaplacianNoise,
+    MixtureNoise,
+    NoiseGenerator,
+    StudentTNoise,
+    UniformNoise,
 )
-
 from .patterns import (
     create_chain,
-    create_fork,
     create_collider,
-    create_mediator,
+    create_fork,
     create_instrument,
+    create_mediator,
     create_random_dag,
+)
+from .transforms import (
+    CompositeTransform,
+    CustomTransform,
+    ExponentialTransform,
+    IdentityTransform,
+    LogTransform,
+    PolynomialTransform,
+    ReLUTransform,
+    SigmoidTransform,
+    SinusoidalTransform,
+    TanhTransform,
+    ThresholdTransform,
+    Transform,
+    get_transform,
 )
 
 __all__ = [
-    # Noise
-    "NoiseGenerator",
-    "GaussianNoise",
-    "UniformNoise",
-    "LaplacianNoise",
-    "StudentTNoise",
-    "MixtureNoise",
-    # Transforms
-    "Transform",
-    "IdentityTransform",
-    "PolynomialTransform",
-    "SigmoidTransform",
-    "TanhTransform",
-    "SinusoidalTransform",
-    "ExponentialTransform",
-    "LogTransform",
-    "ReLUTransform",
-    "ThresholdTransform",
+    "DAG",
+    "ClassificationDataGenerator",
     "CompositeTransform",
     "CustomTransform",
-    "get_transform",
-    # DAG
-    "Edge",
-    "Node",
-    "DAG",
     # Generators
     "DataGenerator",
+    # DAG
+    "Edge",
+    "ExponentialTransform",
     "FeatureSpec",
-    "ClassificationDataGenerator",
+    "GaussianNoise",
+    "IdentityTransform",
+    "LaplacianNoise",
+    "LogTransform",
+    "MixtureNoise",
+    "Node",
+    # Noise
+    "NoiseGenerator",
+    "PolynomialTransform",
+    "ReLUTransform",
+    "SigmoidTransform",
+    "SinusoidalTransform",
+    "StudentTNoise",
+    "TanhTransform",
+    "ThresholdTransform",
+    # Transforms
+    "Transform",
+    "UniformNoise",
     # Patterns
     "create_chain",
-    "create_fork",
     "create_collider",
-    "create_mediator",
+    "create_fork",
     "create_instrument",
+    "create_mediator",
     "create_random_dag",
+    "get_transform",
 ]

@@ -2,34 +2,37 @@
 
 from __future__ import annotations
 
-import numpy as np
-from typing import Optional, Union, Literal
-from dataclasses import dataclass, field
 import warnings
+from dataclasses import dataclass, field
+from typing import Literal
 
-from .noise import NoiseGenerator, GaussianNoise
-from .transforms import Transform, IdentityTransform, get_transform
+import numpy as np
+import pandas as pd
+
 from .dag import DAG
+from .noise import GaussianNoise, NoiseGenerator
+from .transforms import IdentityTransform, Transform, get_transform
 
 
 @dataclass
 class FeatureSpec:
     """Specification for a single feature in classification data generation."""
+
     name: str
     # For generative mode: location shift based on class (loc_class_0, loc_class_1)
     loc_by_class: tuple[float, float] = (0.0, 0.0)
     # For causal mode: weight contribution to Y
     weight_to_y: float = 0.0
-    transform_to_y: Optional[Union[str, Transform]] = None
+    transform_to_y: str | Transform | None = None
     # Noise settings
     noise_std: float = 1.0
-    noise: Optional[NoiseGenerator] = None
+    noise: NoiseGenerator | None = None
     # Dependencies on other features
     parents: list[str] = field(default_factory=list)
     parent_weights: list[float] = field(default_factory=list)
-    parent_transforms: list[Union[str, Transform]] = field(default_factory=list)
+    parent_transforms: list[str | Transform] = field(default_factory=list)
     # Final transform applied to the feature value
-    output_transform: Optional[Union[str, Transform]] = None
+    output_transform: str | Transform | None = None
 
     def __post_init__(self):
         """Ensure default weights and transforms for parents are set."""
@@ -90,14 +93,14 @@ class ClassificationDataGenerator:
         self,
         mode: Literal["generative", "causal"] = "generative",
         class_balance: float = 0.5,
-        feature_specs: Optional[list[FeatureSpec]] = None,
+        feature_specs: list[FeatureSpec] | None = None,
         n_noise_features: int = 0,
         noise_feature_std: float = 1.0,
         # Causal mode specific parameters
         link_function: Literal["logistic", "probit", "linear"] = "logistic",
-        intercept: Optional[float] = None,
+        intercept: float | None = None,
         label_noise: float = 0.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ):
         """
         Initialize the classification data generator.
@@ -109,7 +112,7 @@ class ClassificationDataGenerator:
             n_noise_features: Number of pure noise features to add
             noise_feature_std: Std dev for noise features
             link_function: For causal mode - "logistic", "probit", or "linear"
-            intercept: For causal mode - intercept term. If None, auto-calibrated to match class_balance
+            intercept: For causal mode, intercept term. If None, auto-calibrated to match class_balance
             label_noise: Probability of flipping the label (for both modes)
             seed: Random seed for reproducibility
         """
@@ -143,7 +146,9 @@ class ClassificationDataGenerator:
                 if parent not in self.dag.nodes:
                     raise ValueError(f"Feature '{spec.name}' depends on unknown feature '{parent}'")
                 weight = spec.parent_weights[i] if i < len(spec.parent_weights) else 1.0
-                transform = spec.parent_transforms[i] if i < len(spec.parent_transforms) else "linear"
+                transform = (
+                    spec.parent_transforms[i] if i < len(spec.parent_transforms) else "linear"
+                )
                 self.dag.add_edge(parent, spec.name, weight=weight, transform=transform)
 
         self._feature_order = self.dag._compute_topological_order()
@@ -151,12 +156,12 @@ class ClassificationDataGenerator:
 
     def _calibrate_intercept(self, n_samples: int = 10000):
         """
-            Auto-calibrate intercept to achieve target class balance in causal mode.
+        Auto-calibrate intercept to achieve target class balance in causal mode.
 
-            An interecept is added to the structural equations for Y.
-                η = intercept + Σ(weight_i × transform_i(X_i)) 
-            where η is the linear predictor.
-            We find intercept such that mean(link_function(η)) ≈ class_balance by sampling. 
+        An interecept is added to the structural equations for Y.
+            η = intercept + Σ(weight_i x transform_i(X_i))
+        where η is the linear predictor.
+        We find intercept such that mean(link_function(η)) ≈ class_balance by sampling.
         """
         # Generate features without labels to estimate required intercept
         temp_rng = np.random.default_rng(42)  # Fixed seed for calibration
@@ -177,14 +182,15 @@ class ClassificationDataGenerator:
             self.intercept = brentq(balance_error, -20, 20)
         except ValueError:
             # If brentq fails, use a reasonable default
-            warnings.warn("Could not calibrate intercept precisely. Using approximate value.")
+            warnings.warn("Could not calibrate intercept precisely. " \
+                            "Using approximate value.", stacklevel=2)
             self.intercept = np.log(self.class_balance / (1 - self.class_balance + 1e-10))
 
     def _generate_features(
         self,
         n: int,
         rng: np.random.Generator,
-        y: Optional[np.ndarray] = None,
+        y: np.ndarray | None = None,
     ) -> dict[str, np.ndarray]:
         """Generate feature values."""
         features = {}
@@ -224,12 +230,13 @@ class ClassificationDataGenerator:
     def _compute_linear_predictor(
         self,
         features: dict[str, np.ndarray],
-        intercept: Optional[float] = None,
+        intercept: float | None = None,
     ) -> np.ndarray:
         """
-            Compute linear predictor for causal mode: η = intercept + Σ(weight_i × transform_i(X_i)).
-            Use to compute probabilities for Y using a link function.
+        Compute linear predictor for causal mode: η = intercept + Σ(weight_i x transform_i(X_i)).
+        Use to compute probabilities for Y using a link function.
         """
+
         if intercept is None:
             intercept = self.intercept or 0.0
 
@@ -249,13 +256,12 @@ class ClassificationDataGenerator:
         return linear_pred
 
     def _apply_link(self, linear_pred: np.ndarray) -> np.ndarray:
-        """
-            Apply link function to get probabilities from real numbers.
-        """
+        """Apply link function to get probabilities from real numbers."""
         if self.link_function == "logistic":
             return 1.0 / (1.0 + np.exp(-np.clip(linear_pred, -500, 500)))
         elif self.link_function == "probit":
             from scipy.stats import norm
+
             return norm.cdf(linear_pred)
         elif self.link_function == "linear":
             return np.clip(linear_pred, 0, 1)
@@ -266,8 +272,8 @@ class ClassificationDataGenerator:
         self,
         n: int,
         return_dataframe: bool = False,
-        random_state: Optional[int] = None,
-    ) -> Union[tuple[np.ndarray, np.ndarray], "pd.DataFrame"]:
+        random_state: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray] | pd.DataFrame:
         """
         Generate a batch of classification data.
 
@@ -280,10 +286,7 @@ class ClassificationDataGenerator:
             If return_dataframe=False: tuple (X, y) where X is (n, n_features) and y is (n,)
             If return_dataframe=True: DataFrame with features and 'y' column
         """
-        if random_state is not None:
-            rng = np.random.default_rng(random_state)
-        else:
-            rng = self.rng
+        rng = np.random.default_rng(random_state) if random_state is not None else self.rng
 
         if self.mode == "generative":
             # Generative mode: Y first, then X|Y
@@ -309,17 +312,13 @@ class ClassificationDataGenerator:
         # Combine into feature matrix
         feature_names = self._feature_order + list(noise_features.keys())
         X = np.column_stack(
-            [features[name] for name in self._feature_order] +
-            [noise_features[name] for name in noise_features]
+            [features[name] for name in self._feature_order]
+            + [noise_features[name] for name in noise_features]
         )
 
         if return_dataframe:
-            try:
-                import pandas as pd
-            except ImportError:
-                raise ImportError("pandas is required for return_dataframe=True")
             df = pd.DataFrame(X, columns=feature_names)
-            df['y'] = y
+            df["y"] = y
             return df
 
         return X, y
@@ -329,8 +328,8 @@ class ClassificationDataGenerator:
         n: int,
         interventions: dict[str, float],
         return_dataframe: bool = False,
-        random_state: Optional[int] = None,
-    ) -> Union[tuple[np.ndarray, np.ndarray], "pd.DataFrame"]:
+        random_state: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray] | pd.DataFrame:
         """
         Generate classification data with interventions on features (causal mode only).
 
@@ -364,7 +363,9 @@ class ClassificationDataGenerator:
 
         for name in interventions:
             if name not in self._spec_lookup:
-                raise ValueError(f"Unknown feature '{name}'. Available: {list(self._spec_lookup.keys())}")
+                raise ValueError(
+                    f"Unknown feature '{name}'. Available: {list(self._spec_lookup.keys())}"
+                )
 
         warnings.warn(
             "Interventional sampling uses the intercept calibrated for the "
@@ -412,17 +413,13 @@ class ClassificationDataGenerator:
             # Combine into feature matrix
             feature_names = self._feature_order + list(noise_features.keys())
             X = np.column_stack(
-                [features[name] for name in self._feature_order] +
-                [noise_features[name] for name in noise_features]
+                [features[name] for name in self._feature_order]
+                + [noise_features[name] for name in noise_features]
             )
 
             if return_dataframe:
-                try:
-                    import pandas as pd
-                except ImportError:
-                    raise ImportError("pandas is required for return_dataframe=True")
                 df = pd.DataFrame(X, columns=feature_names)
-                df['y'] = y
+                df["y"] = y
                 return df
 
             return X, y
@@ -490,10 +487,10 @@ class ClassificationDataGenerator:
         """
         try:
             import matplotlib.pyplot as plt
-            from matplotlib.patches import Circle
             from matplotlib.lines import Line2D
+            from matplotlib.patches import Circle
         except ImportError:
-            raise ImportError("matplotlib is required for plot_dag()")
+            raise ImportError("matplotlib is required for plot_dag()") from None
 
         fig, ax = plt.subplots(figsize=figsize)
 
@@ -543,9 +540,11 @@ class ClassificationDataGenerator:
                 x2, y2 = positions[target]
                 ax.annotate(
                     "",
-                    xy=(x2, y2), xytext=(x1, y1),
-                    arrowprops=dict(arrowstyle="->", color="gray", lw=1.5,
-                                   connectionstyle="arc3,rad=0.1")
+                    xy=(x2, y2),
+                    xytext=(x1, y1),
+                    arrowprops=dict(
+                        arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"
+                    ),
                 )
                 if show_weights:
                     mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
@@ -563,15 +562,24 @@ class ClassificationDataGenerator:
                     x2, y2 = positions[target_name]
                     ax.annotate(
                         "",
-                        xy=(x2, y2), xytext=(x1, y1),
-                        arrowprops=dict(arrowstyle="->", color="darkgreen", lw=2,
-                                       connectionstyle="arc3,rad=0.05")
+                        xy=(x2, y2),
+                        xytext=(x1, y1),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            color="darkgreen",
+                            lw=2,
+                            connectionstyle="arc3,rad=0.05",
+                        ),
                     )
                     if show_weights:
                         mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
                         label = f"{spec.weight_to_y:.2f}"
                         if spec.transform_to_y:
-                            t_name = spec.transform_to_y if isinstance(spec.transform_to_y, str) else spec.transform_to_y.__class__.__name__[:4]
+                            t_name = (
+                                spec.transform_to_y
+                                if isinstance(spec.transform_to_y, str)
+                                else spec.transform_to_y.__class__.__name__[:4]
+                            )
                             label += f"\n({t_name[:4]})"
                         ax.text(mid_x + 0.03, mid_y, label, fontsize=7, color="darkgreen")
         else:
@@ -582,9 +590,14 @@ class ClassificationDataGenerator:
                     x2, y2 = positions[spec.name]
                     ax.annotate(
                         "",
-                        xy=(x2, y2), xytext=(x1, y1),
-                        arrowprops=dict(arrowstyle="->", color="darkgreen", lw=2,
-                                       connectionstyle="arc3,rad=0.05")
+                        xy=(x2, y2),
+                        xytext=(x1, y1),
+                        arrowprops=dict(
+                            arrowstyle="->",
+                            color="darkgreen",
+                            lw=2,
+                            connectionstyle="arc3,rad=0.05",
+                        ),
                     )
                     if show_weights:
                         shift = spec.loc_by_class[1] - spec.loc_by_class[0]
@@ -602,18 +615,34 @@ class ClassificationDataGenerator:
         x, y = positions[target_name]
         y_circle = Circle((x, y), 0.06, color="gold", ec="darkgoldenrod", lw=3, zorder=10)
         ax.add_patch(y_circle)
-        ax.text(x, y, target_name, ha="center", va="center", fontsize=12, fontweight="bold", zorder=11)
+        ax.text(
+            x, y, target_name, ha="center", va="center", fontsize=12, fontweight="bold", zorder=11
+        )
 
         # Add legend
         legend_elements = [
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='lightblue',
-                   markersize=10, label='Features'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='gold',
-                   markersize=12, label='Target (Y)'),
-            Line2D([0], [0], color='gray', lw=1.5, label='Feature edges'),
-            Line2D([0], [0], color='darkgreen', lw=2, label='Target edges'),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="lightblue",
+                markersize=10,
+                label="Features",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor="gold",
+                markersize=12,
+                label="Target (Y)",
+            ),
+            Line2D([0], [0], color="gray", lw=1.5, label="Feature edges"),
+            Line2D([0], [0], color="darkgreen", lw=2, label="Target edges"),
         ]
-        ax.legend(handles=legend_elements, loc='upper right', fontsize=8)
+        ax.legend(handles=legend_elements, loc="upper right", fontsize=8)
 
         ax.set_xlim(-0.1, 1.1)
         ax.set_ylim(-0.1, 1.1)
@@ -680,12 +709,12 @@ class ClassificationDataGenerator:
         loc_shift_range: tuple[float, float] = (0.5, 2.0),
         noise_std_range: tuple[float, float] = (0.5, 1.5),
         nonlinear_prob: float = 0.2,
-        available_transforms: Optional[list[str]] = None,
+        available_transforms: list[str] | None = None,
         # Other settings
         link_function: Literal["logistic", "probit", "linear"] = "logistic",
         label_noise: float = 0.0,
-        seed: Optional[int] = None,
-    ) -> "ClassificationDataGenerator":
+        seed: int | None = None,
+    ) -> ClassificationDataGenerator:
         """
         Create a ClassificationDataGenerator with randomly generated feature structure.
 

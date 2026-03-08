@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-from typing import Optional, Union
 
 from .dag import DAG
 from .transforms import Transform, get_transform, transforms_available
@@ -11,13 +10,13 @@ from .transforms import Transform, get_transform, transforms_available
 
 def create_chain(
     n_nodes: int,
-    weights: Optional[list[float]] = None,
-    transforms: Optional[list[Union[str, Transform]]] = None,
+    weights: list[float] | None = None,
+    transforms: list[str | Transform] | None = None,
     noise_std: float = 1.0,
-    names: Optional[list[str]] = None,
+    names: list[str] | None = None,
 ) -> DAG:
     """
-    Create a chain DAG: X1 -> X2 -> ... -> Xn
+    Create a chain DAG: X1 -> X2 -> ... -> Xn.
 
     Args:
         n_nodes: Number of nodes in the chain
@@ -46,13 +45,13 @@ def create_chain(
 def create_fork(
     n_children: int = 2,
     confounder_name: str = "Z",
-    child_names: Optional[list[str]] = None,
-    weights: Optional[list[float]] = None,
-    transforms: Optional[list[Union[str, Transform]]] = None,
+    child_names: list[str] | None = None,
+    weights: list[float] | None = None,
+    transforms: list[str | Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
-    Create a fork DAG (common cause): Z -> X1, Z -> X2, ..., Z -> Xn
+    Create a fork DAG (common cause): Z -> X1, Z -> X2, ..., Z -> Xn.
 
     This creates confounding between the children.
 
@@ -83,13 +82,13 @@ def create_fork(
 def create_collider(
     n_parents: int = 2,
     collider_name: str = "Y",
-    parent_names: Optional[list[str]] = None,
-    weights: Optional[list[float]] = None,
-    transforms: Optional[list[Union[str, Transform]]] = None,
+    parent_names: list[str] | None = None,
+    weights: list[float] | None = None,
+    transforms: list[str | Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
-    Create a collider DAG: X1 -> Y, X2 -> Y, ..., Xn -> Y
+    Create a collider DAG: X1 -> Y, X2 -> Y, ..., Xn -> Y.
 
     Parents are marginally independent but conditionally dependent given Y.
 
@@ -126,11 +125,11 @@ def create_mediator(
     direct_effect: float = 1.0,
     indirect_effect_xm: float = 1.0,
     indirect_effect_my: float = 1.0,
-    transforms: Optional[dict[str, Union[str, Transform]]] = None,
+    transforms: dict[str, str | Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
-    Create a mediation DAG: X -> M -> Y and X -> Y
+    Create a mediation DAG: X -> M -> Y and X -> Y.
 
     Allows studying direct vs indirect effects.
 
@@ -154,12 +153,24 @@ def create_mediator(
     dag.add_node(mediator_name, noise_std=noise_std)
     dag.add_node(outcome_name, noise_std=noise_std)
 
-    dag.add_edge(treatment_name, mediator_name, weight=indirect_effect_xm,
-                transform=transforms.get("X->M", "linear"))
-    dag.add_edge(mediator_name, outcome_name, weight=indirect_effect_my,
-                transform=transforms.get("M->Y", "linear"))
-    dag.add_edge(treatment_name, outcome_name, weight=direct_effect,
-                transform=transforms.get("X->Y", "linear"))
+    dag.add_edge(
+        treatment_name,
+        mediator_name,
+        weight=indirect_effect_xm,
+        transform=transforms.get("X->M", "linear"),
+    )
+    dag.add_edge(
+        mediator_name,
+        outcome_name,
+        weight=indirect_effect_my,
+        transform=transforms.get("M->Y", "linear"),
+    )
+    dag.add_edge(
+        treatment_name,
+        outcome_name,
+        weight=direct_effect,
+        transform=transforms.get("X->Y", "linear"),
+    )
 
     return dag
 
@@ -173,11 +184,11 @@ def create_instrument(
     x_y_weight: float = 1.0,
     u_x_weight: float = 0.5,
     u_y_weight: float = 0.5,
-    transforms: Optional[dict[str, Union[str, Transform]]] = None,
+    transforms: dict[str, str | Transform] | None = None,
     noise_std: float = 1.0,
 ) -> DAG:
     """
-    Create an instrumental variable DAG: Z -> X -> Y with U -> X and U -> Y
+    Create an instrumental variable DAG: Z -> X -> Y with U -> X and U -> Y.
 
     Z is an instrument (affects Y only through X), U is a confounder.
 
@@ -204,14 +215,24 @@ def create_instrument(
     dag.add_node(treatment_name, noise_std=noise_std)
     dag.add_node(outcome_name, noise_std=noise_std)
 
-    dag.add_edge(instrument_name, treatment_name, weight=z_x_weight,
-                transform=transforms.get("Z->X", "linear"))
-    dag.add_edge(treatment_name, outcome_name, weight=x_y_weight,
-                transform=transforms.get("X->Y", "linear"))
-    dag.add_edge(confounder_name, treatment_name, weight=u_x_weight,
-                transform=transforms.get("U->X", "linear"))
-    dag.add_edge(confounder_name, outcome_name, weight=u_y_weight,
-                transform=transforms.get("U->Y", "linear"))
+    dag.add_edge(
+        instrument_name,
+        treatment_name,
+        weight=z_x_weight,
+        transform=transforms.get("Z->X", "linear"),
+    )
+    dag.add_edge(
+        treatment_name, outcome_name, weight=x_y_weight, transform=transforms.get("X->Y", "linear")
+    )
+    dag.add_edge(
+        confounder_name,
+        treatment_name,
+        weight=u_x_weight,
+        transform=transforms.get("U->X", "linear"),
+    )
+    dag.add_edge(
+        confounder_name, outcome_name, weight=u_y_weight, transform=transforms.get("U->Y", "linear")
+    )
 
     return dag
 
@@ -221,9 +242,9 @@ def create_random_dag(
     edge_probability: float = 0.3,
     weight_range: tuple[float, float] = (-1.0, 1.0),
     noise_std: float = 1.0,
-    seed: Optional[int] = None,
-    node_names: Optional[list[str]] = None,
-    use_transform: Optional[bool] = False
+    seed: int | None = None,
+    node_names: list[str] | None = None,
+    use_transform: bool | None = False,
 ) -> DAG:
     """
     Create a random DAG with specified number of nodes and edge probability.
@@ -258,5 +279,7 @@ def create_random_dag(
                 weight = rng.uniform(weight_range[0], weight_range[1])
                 if use_transform:
                     transform_fct = np.random.choice(transforms_available)
-                dag.add_edge(names[i], names[j], weight=weight, transform=get_transform(transform_fct))
+                dag.add_edge(
+                    names[i], names[j], weight=weight, transform=get_transform(transform_fct)
+                )
     return dag

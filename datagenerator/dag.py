@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-import numpy as np
-from typing import Optional, Union
-from dataclasses import dataclass, field
-from collections import defaultdict
 import warnings
+from collections import defaultdict
+from dataclasses import dataclass, field
 
-from .noise import NoiseGenerator, GaussianNoise, UniformNoise, LaplacianNoise, StudentTNoise
-from .transforms import Transform, IdentityTransform, get_transform
+import numpy as np
+
+from .noise import GaussianNoise, LaplacianNoise, NoiseGenerator, StudentTNoise, UniformNoise
+from .transforms import IdentityTransform, Transform, get_transform
 
 
 @dataclass
 class Edge:
     """Represents an edge in the DAG with associated weight and transformation."""
+
     source: str
     target: str
     weight: float = 1.0
@@ -34,13 +35,14 @@ class Node:
         X = f(parents) + noise
     where f(parents) = sum of edge contributions from all parents
     """
+
     name: str
     noise: NoiseGenerator = field(default_factory=lambda: GaussianNoise(std=1.0))
     is_root: bool = True  # Updated when edges are added
 
     # For interventions (do-calculus)
     intervened: bool = False
-    intervention_value: Optional[float] = None
+    intervention_value: float | None = None
 
 
 class DAG:
@@ -57,18 +59,21 @@ class DAG:
     """
 
     def __init__(self):
+        """
+        initialize DAG with nodes and edges dict
+        """
         self.nodes: dict[str, Node] = {}
         self.edges: dict[str, list[Edge]] = defaultdict(list)  # target -> list of incoming edges
-        self._topological_order: Optional[list[str]] = None
+        self._topological_order: list[str] | None = None
 
     def add_node(
         self,
         name: str,
-        noise: Optional[NoiseGenerator] = None,
+        noise: NoiseGenerator | None = None,
         noise_type: str = "gaussian",
         noise_std: float = 1.0,
-        noise_params: Optional[dict] = None,
-    ) -> "DAG":
+        noise_params: dict | None = None,
+    ) -> DAG:
         """
         Add a node to the DAG.
 
@@ -83,7 +88,7 @@ class DAG:
             Self for method chaining
         """
         if name in self.nodes:
-            warnings.warn(f"Node '{name}' already exists, updating it.")
+            warnings.warn(f"Node '{name}' already exists, updating it.", stacklevel=2)
 
         if noise is None:
             noise_params = noise_params or {}
@@ -107,9 +112,9 @@ class DAG:
         source: str,
         target: str,
         weight: float = 1.0,
-        transform: Optional[Union[Transform, str]] = None,
-        transform_params: Optional[dict] = None,
-    ) -> "DAG":
+        transform: Transform | str | None = None,
+        transform_params: dict | None = None,
+    ) -> DAG:
         """
         Add a directed edge from source to target.
 
@@ -155,12 +160,14 @@ class DAG:
 
     def _compute_topological_order(self) -> list[str]:
         """
-            Compute topological ordering using Kahn's algorithm.
-            It:
-                - computes the order in which nodes must be processed (parents before children). Needed for sampling.
-                - detects cycles in the graph.
-                - caches the result for future calls.
+        Compute topological ordering using Kahn's algorithm.
+        It:
+            - computes the order in which nodes must be processed (parents before children). 
+              Needed for sampling.
+            - detects cycles in the graph.
+            - caches the result for future calls.
         """
+
         if self._topological_order is not None:
             return self._topological_order
 
@@ -204,7 +211,7 @@ class DAG:
                     children.append(target)
         return children
 
-    def intervene(self, node: str, value: float) -> "DAG":
+    def intervene(self, node: str, value: float) -> DAG:
         """
         Set an intervention on a node (do-calculus).
 
@@ -224,19 +231,21 @@ class DAG:
         self.nodes[node].intervention_value = value
         return self
 
-    def clear_interventions(self) -> "DAG":
+    def clear_interventions(self) -> DAG:
         """Clear all interventions."""
         for node in self.nodes.values():
             node.intervened = False
             node.intervention_value = None
         return self
 
-    def copy(self) -> "DAG":
+    def copy(self) -> DAG:
         """Create a deep copy of this DAG."""
         import copy
+
         return copy.deepcopy(self)
 
     def __repr__(self) -> str:
+        """Return a concise string representation of the DAG."""
         n_nodes = len(self.nodes)
         n_edges = sum(len(e) for e in self.edges.values())
         return f"DAG(nodes={n_nodes}, edges={n_edges})"
@@ -254,7 +263,9 @@ class DAG:
                 parent_str = ", ".join(parents)
                 lines.append(f"\n{name} <- {parent_str}")
                 for edge in self.edges[name]:
-                    lines.append(f"  {edge.source}: weight={edge.weight}, transform={edge.transform}")
+                    lines.append(
+                        f"  {edge.source}: weight={edge.weight}, transform={edge.transform}"
+                    )
             else:
                 lines.append(f"\n{name} (root)")
 
@@ -312,7 +323,7 @@ class DAG:
             import matplotlib.pyplot as plt
             from matplotlib.patches import Circle
         except ImportError:
-            raise ImportError("matplotlib is required for plot()")
+            raise ImportError("matplotlib is required for plot()") from None
 
         fig, ax = plt.subplots(figsize=figsize)
 
@@ -352,13 +363,11 @@ class DAG:
                 # Draw arrow
                 ax.annotate(
                     "",
-                    xy=(x2, y2), xytext=(x1, y1),
+                    xy=(x2, y2),
+                    xytext=(x1, y1),
                     arrowprops=dict(
-                        arrowstyle="->",
-                        color="gray",
-                        lw=1.5,
-                        connectionstyle="arc3,rad=0.1"
-                    )
+                        arrowstyle="->", color="gray", lw=1.5, connectionstyle="arc3,rad=0.1"
+                    ),
                 )
 
                 # Add weight label
