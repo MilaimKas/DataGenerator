@@ -229,3 +229,7 @@ MIT
 
 - Add categorical variable support
 - Add free text variable support    
+
+## Known bugs and inconstitencies
+
+- `sample_interventional()` function's return output parameters different for DataGenerator (return_dict) and ClassificationDataGenerator (retrun_dataframe)
