@@ -23,12 +23,12 @@ classifiers = [
 keywords = ["causal inference", "DAG", "synthetic data", "data generation", "structural causal models"]
 dependencies = [
     "numpy>=1.21.0",
+    "pandas>=1.4.0",
 ]
 
 [project.optional-dependencies]
 full = [
     "matplotlib>=3.5.0",
-    "pandas>=1.4.0",
     "scipy>=1.8.0",
 ]
 dev = [
@@ -37,8 +37,48 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/datagenerator"
-Repository = "https://github.com/yourusername/datagenerator"
+Homepage = "https://github.com/MilaimKas/DataGenerator"
+Repository = "https://github.com/MilaimKas/DataGenerator"
 
 [tool.setuptools.packages.find]
 include = ["datagenerator*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.9",
+    "ty>=0.0.1a6",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",
+  "I",
+  "N",
+  "D",
+  "UP",
+  "B",
+  "SIM",
+  "TID",
+  "RUF",
+]
+ignore = ["D203", "D212"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+addopts = "--cov=datagenerator --cov-report=term-missing"
+testpaths = ["tests", "datagenerator"]
+
+[tool.ty]
+# ty type checker — https://github.com/astral-sh/ty
