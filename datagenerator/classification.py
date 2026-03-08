@@ -170,8 +170,11 @@ class ClassificationDataGenerator:
 
         # Find intercept that gives target class balance mean(P(Y=1)) = class_balance
         # Using bisection search
-        from scipy.optimize import brentq
-
+        try:
+            from scipy.optimize import brentq
+        except ImportError:
+            raise ImportError("scipy is required for auto-calibrating intercept") from None
+        
         def balance_error(intercept):
             probs = self._apply_link(linear_pred + intercept)
             return probs.mean() - self.class_balance
@@ -683,6 +686,10 @@ class ClassificationDataGenerator:
                 lines.append(f"    output_transform: {spec.output_transform}")
 
         return "\n".join(lines)
+
+    def show_equations(self) -> str:
+        """Return the structural equations in mathematical notation."""
+        return self.dag.show_equations()
 
     @classmethod
     def from_random(
