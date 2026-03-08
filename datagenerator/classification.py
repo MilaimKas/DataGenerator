@@ -256,9 +256,11 @@ class ClassificationDataGenerator:
         if self.link_function == "logistic":
             return 1.0 / (1.0 + np.exp(-np.clip(linear_pred, -500, 500)))
         elif self.link_function == "probit":
-            from scipy.stats import norm
-
-            return norm.cdf(linear_pred)
+            try:
+                from scipy.stats import norm
+                return norm.cdf(linear_pred)
+            except ImportError:
+                raise ImportError("scipy is required for probit link function") from None
         elif self.link_function == "linear":
             return np.clip(linear_pred, 0, 1)
         else:
