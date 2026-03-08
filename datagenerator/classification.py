@@ -180,7 +180,7 @@ class ClassificationDataGenerator:
             return probs.mean() - self.class_balance
 
         try:
-            self.intercept = brentq(balance_error, -20, 20)
+            self.intercept = brentq(balance_error, -20, 20)[0] # brentq returns a tuple (root, info), we want the root as float
         except ValueError:
             # If brentq fails, use a reasonable default
             warnings.warn("Could not calibrate intercept precisely. Using approximate value.", stacklevel=2)
