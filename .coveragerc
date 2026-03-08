@@ -1,0 +1,11 @@
+# Configures how pytest --cov measures code coverage. 
+
+[run]
+source = datagenerator
+omit =
+    tests/*
+    */__init__.py
+
+[report]
+show_missing = true
+skip_covered = false
