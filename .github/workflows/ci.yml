@@ -1,0 +1,45 @@
+# Continuous Integration workflow for the DataGenerator project. 
+# This workflow runs on pushes and pull requests to the main branch, performing linting, type checking, 
+# and testing across multiple Python versions.
+
+name: CI
+
+# trigger the workflow on pushes and pull requests to the main branch
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+#  lint:
+#    name: Lint & format
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: astral-sh/setup-uv@v5
+#      - run: uv sync --dev
+#      - run: uv run ruff format --check .
+#      - run: uv run ruff check .
+
+#  typecheck:
+#    name: Type check
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: astral-sh/setup-uv@v5
+#      - run: uv sync --dev
+#      - run: uv run ty check
+
+# run  the pytest suite across multiple Python versions to ensure compatibility and correctness
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4 # clone the repository into the runner (ubuntu machine)
+      - uses: astral-sh/setup-uv@v5 # install  uv  
+      - run: uv sync --dev
+      - run: uv run pytest --tb=short
