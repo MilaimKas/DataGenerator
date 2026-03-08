@@ -1,0 +1,19 @@
+# Ensures every editor (VS Code, PyCharm, vim, etc.) uses the same formatting conventions
+# -> indentation size, line endings, trailing whitespace, etc
+
+root = true # This is the root .editorconfig file, so stop searching for others
+
+# All files
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{yml,yaml,toml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
