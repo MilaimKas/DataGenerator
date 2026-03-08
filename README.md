@@ -57,7 +57,7 @@ data_dict = generator.sample(n=1000, return_dict=True)
 from datagenerator import ClassificationDataGenerator, FeatureSpec
 
 # Generative mode: control class balance directly
-gen = ClassificationDataGenerator(
+gen_class = ClassificationDataGenerator(
     mode="generative",
     class_balance=0.1,  # 10% positive class
     feature_specs=[
@@ -69,10 +69,11 @@ gen = ClassificationDataGenerator(
     n_noise_features=3,
     seed=42
 )
-X, y = gen.generate_batch(1000)
+X, y = gen_class.generate_batch(1000)
+gen_class.plot_dag()
 
 # Or generate randomly configured data
-gen = ClassificationDataGenerator.from_random(
+gen_class = ClassificationDataGenerator.from_random(
     n_features=10,
     n_informative=6,
     n_direct_to_y=3,
@@ -81,7 +82,7 @@ gen = ClassificationDataGenerator.from_random(
     mode="causal",
     seed=42
 )
-X, y = gen.generate_batch(1000)
+X, y = gen_class.generate_batch(1000)
 ```
 
 ### Common DAG Patterns
@@ -136,10 +137,10 @@ interventional_data = generator.sample_interventional(
 
 # Also possible with classification data in causal mode
 # be carefull when interpreting the results 
-interventional_data = gen.sample_interventional(
+interventional_data = gen_class.sample_interventional(
     n=1000,
-    interventions={"X": 2.0},
-    return_dict=True
+    interventions={"f1": 2.0},
+    return_dataframe=True
 )
 ```
 
@@ -165,6 +166,8 @@ dag.add_edge("X", "Y", weight=1.0, transform=CompositeTransform([
     PolynomialTransform(degrees=[2]),
     SigmoidTransform(scale=0.5)
 ]))
+
+print(dag.show_equations())
 ```
 
 ### Noise Distributions
@@ -184,26 +187,28 @@ dag.add_node("W", noise=MixtureNoise(
     components=[GaussianNoise(std=1.0), LaplacianNoise(scale=2.0)],
     weights=[0.7, 0.3]
 ))
+
+print(dag.show_equations())
 ```
 
 ### Visualization
 
 ```python
 # Requires matplotlib
-dag.plot(figsize=(10, 8), show_weights=True)
+gen.dag.plot(figsize=(10, 8), show_weights=True)
 
 # ASCII representation
-print(dag.to_ascii())
+print(gen_class.dag.to_ascii())
 
 # Detailed description
 print(dag.describe())
 
 # display structural equations (both for DataGenerator and ClassificationDataGenerator)
-print(gen.show_equations())
+print(gen_class.show_equations())
 print(generator.show_equations())
 
 # For ClassificationDataGenerator
-gen.plot_dag()
+gen_class.plot_dag()
 ```
 
 ## Features
