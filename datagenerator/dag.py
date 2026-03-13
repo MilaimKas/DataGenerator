@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .categorical import CategoricalNodeInfo
 from .noise import GaussianNoise, LaplacianNoise, NoiseGenerator, StudentTNoise, UniformNoise
 from .transforms import IdentityTransform, Transform, get_transform
 
@@ -63,6 +64,8 @@ class DAG:
         self.nodes: dict[str, Node] = {}
         self.edges: dict[str, list[Edge]] = defaultdict(list)  # target -> list of incoming edges
         self._topological_order: list[str] | None = None
+        self.categorical_nodes: dict[str, CategoricalNodeInfo] = {}
+        self._sub_node_to_categorical: dict[str, str] = {}  # reverse lookup cache
 
     def add_node(
         self,
@@ -105,6 +108,44 @@ class DAG:
         self._topological_order = None  # Invalidate cache
         return self
 
+    def add_categorical_node(
+        self,
+        name: str,
+        categories: list[str],
+        probabilities: list[float] | None = None,
+    ) -> DAG:
+        """Add a categorical variable, internally expanded into one-hot sub-nodes.
+
+        Args:
+            name: User-facing name for the categorical variable.
+            categories: List of category labels (e.g., ["R", "G", "B"]).
+            probabilities: Sampling probabilities for root categorical nodes.
+                If None, the node is a child whose distribution comes from parents via softmax.
+
+        Returns:
+            Self for method chaining.
+        """
+        if name in self.nodes or name in self.categorical_nodes:
+            raise ValueError(f"Node '{name}' already exists in the DAG.")
+
+        info = CategoricalNodeInfo(name=name, categories=categories, probabilities=probabilities)
+        self.categorical_nodes[name] = info
+
+        # Add one-hot sub-nodes with zero-std noise (placeholder, never used during sampling)
+        for sub_name in info.sub_node_names:
+            self.add_node(sub_name, noise_std=0.0)
+            self._sub_node_to_categorical[sub_name] = name
+
+        return self
+
+    def is_categorical(self, name: str) -> bool:
+        """Check if a node name corresponds to a categorical variable."""
+        return name in self.categorical_nodes
+
+    def get_categorical_owner(self, sub_node_name: str) -> str | None:
+        """Return the categorical variable name that owns this sub-node, or None."""
+        return self._sub_node_to_categorical.get(sub_node_name)
+
     def add_edge(
         self,
         source: str,
@@ -112,20 +153,41 @@ class DAG:
         weight: float = 1.0,
         transform: Transform | str | None = None,
         transform_params: dict | None = None,
+        weights: dict[str, float] | None = None,
+        transforms: dict[str, str | Transform] | None = None,
     ) -> DAG:
-        """
-        Add a directed edge from source to target.
+        """Add a directed edge from source to target.
+
+        For edges involving categorical variables, use the ``weights`` and
+        ``transforms`` dicts to specify per-category weights and transforms.
 
         Args:
-            source: Name of the parent node
-            target: Name of the child node
-            weight: Linear weight/coefficient for this edge
-            transform: Transform instance or name (e.g., "quadratic", "sigmoid")
-            transform_params: Parameters for named transforms
+            source: Name of the parent node (may be categorical).
+            target: Name of the child node (may be categorical).
+            weight: Scalar weight (used only for continuous→continuous edges).
+            transform: Transform instance or name (continuous→continuous edges).
+            transform_params: Parameters for named transforms.
+            weights: Per-category weights, e.g. {"R": 2.0, "G": -1.0}.
+                Required when source or target is categorical.
+            transforms: Per-category transforms, e.g. {"R": "quadratic"}.
+                Missing keys default to identity.
 
         Returns:
-            Self for method chaining
+            Self for method chaining.
         """
+        source_is_cat = self.is_categorical(source)
+        target_is_cat = self.is_categorical(target)
+
+        if source_is_cat and target_is_cat:
+            raise NotImplementedError("Categorical-to-categorical edges are not yet supported.")
+
+        # Dispatch to categorical edge logic if either endpoint is categorical
+        if source_is_cat or target_is_cat:
+            return self._add_categorical_edge(
+                source, target, source_is_cat, target_is_cat, weights, transforms, transform_params
+            )
+
+        # --- Standard continuous→continuous edge ---
         # Auto-create nodes if they don't exist
         if source not in self.nodes:
             self.add_node(source)
@@ -152,6 +214,63 @@ class DAG:
         except ValueError as e:
             # Remove the edge if it creates a cycle
             self.edges[target].pop()
+            raise ValueError(f"Adding edge {source} -> {target} would create a cycle") from e
+
+        return self
+
+    def _add_categorical_edge(
+        self,
+        source: str,
+        target: str,
+        source_is_cat: bool,
+        target_is_cat: bool,
+        weights: dict[str, float] | None,
+        transforms: dict[str, str | Transform] | None,
+        transform_params: dict | None,
+    ) -> DAG:
+        """Internal: create per-category sub-edges for categorical endpoints."""
+        transforms = transforms or {}
+        transform_params = transform_params or {}
+
+        if source_is_cat:
+            # Categorical parent → continuous child: one edge per source sub-node
+            info = self.categorical_nodes[source]
+            if target not in self.nodes:
+                self.add_node(target)
+            weights = weights or {cat: 0.0 for cat in info.categories}
+
+            for cat in info.categories:
+                sub_name = f"{source}_{cat}"
+                w = weights.get(cat, 0.0)
+                t = transforms.get(cat, "identity")
+                if isinstance(t, str):
+                    t = get_transform(t, **transform_params)
+                self.nodes[target].is_root = False
+                edge = Edge(source=sub_name, target=target, weight=w, transform=t)
+                self.edges[target].append(edge)
+
+        else:
+            # Continuous parent → categorical child: one edge per target sub-node
+            info = self.categorical_nodes[target]
+            if source not in self.nodes:
+                self.add_node(source)
+            weights = weights or {cat: 0.0 for cat in info.categories}
+
+            for cat in info.categories:
+                sub_name = f"{target}_{cat}"
+                w = weights.get(cat, 0.0)
+                t = transforms.get(cat, "identity")
+                if isinstance(t, str):
+                    t = get_transform(t, **transform_params)
+                self.nodes[sub_name].is_root = False
+                edge = Edge(source=source, target=sub_name, weight=w, transform=t)
+                self.edges[sub_name].append(edge)
+
+        # Check for cycles
+        self._topological_order = None
+        try:
+            self._compute_topological_order()
+        except ValueError as e:
             raise ValueError(f"Adding edge {source} -> {target} would create a cycle") from e
 
         return self
@@ -208,22 +327,36 @@ class DAG:
                     children.append(target)
         return children
 
-    def intervene(self, node: str, value: float) -> DAG:
-        """
-        Set an intervention on a node (do-calculus).
+    def intervene(self, node: str, value: float | str) -> DAG:
+        """Set an intervention on a node (do-calculus).
 
         This fixes the node to a constant value, breaking the influence
         of its parents.
 
+        For categorical nodes, pass a category name as ``value``
+        (e.g., ``dag.intervene("Color", "R")``).
+
         Args:
-            node: Name of the node to intervene on
-            value: Fixed value for the intervention
+            node: Name of the node to intervene on.
+            value: Fixed value (float for continuous, category name for categorical).
 
         Returns:
-            Self for method chaining
+            Self for method chaining.
         """
+        if self.is_categorical(node):
+            info = self.categorical_nodes[node]
+            if value not in info.categories:
+                raise ValueError(f"'{value}' is not a valid category for '{node}'. Options: {info.categories}")
+            for sub_name in info.sub_node_names:
+                cat = sub_name.removeprefix(f"{node}_")
+                self.nodes[sub_name].intervened = True
+                self.nodes[sub_name].intervention_value = 1.0 if cat == value else 0.0
+            return self
+
         if node not in self.nodes:
             raise ValueError(f"Node '{node}' not in DAG")
+        if isinstance(value, str):
+            raise TypeError(f"String value '{value}' is only valid for categorical nodes, but '{node}' is continuous.")
         self.nodes[node].intervened = True
         self.nodes[node].intervention_value = value
         return self
@@ -247,59 +380,133 @@ class DAG:
         n_edges = sum(len(e) for e in self.edges.values())
         return f"DAG(nodes={n_nodes}, edges={n_edges})"
 
+    def _get_user_facing_order(self) -> list[str]:
+        """Return topological order with sub-nodes collapsed to categorical names."""
+        order = self._compute_topological_order()
+        result: list[str] = []
+        seen_categoricals: set[str] = set()
+        for name in order:
+            cat_name = self.get_categorical_owner(name)
+            if cat_name is not None:
+                if cat_name not in seen_categoricals:
+                    seen_categoricals.add(cat_name)
+                    result.append(cat_name)
+            else:
+                result.append(name)
+        return result
+
     def describe(self) -> str:
         """Return a detailed description of the DAG structure."""
         lines = ["DAG Structure:", "=" * 40]
 
-        order = self._compute_topological_order()
-        for name in order:
-            node = self.nodes[name]
-            parents = self.get_parents(name)
-
-            if parents:
-                parent_str = ", ".join(parents)
-                lines.append(f"\n{name} <- {parent_str}")
-                for edge in self.edges[name]:
-                    lines.append(f"  {edge.source}: weight={edge.weight}, transform={edge.transform}")
+        for name in self._get_user_facing_order():
+            if self.is_categorical(name):
+                info = self.categorical_nodes[name]
+                # Check if it's a root categorical
+                has_parents = any(len(self.edges.get(sn, [])) > 0 for sn in info.sub_node_names)
+                if has_parents:
+                    # Collect unique parent names (resolving sub-nodes to categorical names)
+                    parent_names: set[str] = set()
+                    for sn in info.sub_node_names:
+                        for edge in self.edges.get(sn, []):
+                            owner = self.get_categorical_owner(edge.source)
+                            parent_names.add(owner if owner else edge.source)
+                    lines.append(f"\n{name} [categorical: {info.categories}] <- {', '.join(sorted(parent_names))}")
+                    for sn in info.sub_node_names:
+                        for edge in self.edges.get(sn, []):
+                            lines.append(f"  {edge.source} -> {sn}: weight={edge.weight}, transform={edge.transform}")
+                else:
+                    lines.append(f"\n{name} [categorical root: {info.categories}]")
+                    lines.append(f"  probabilities: {info.probabilities}")
+                # Show intervention status
+                if any(self.nodes[sn].intervened for sn in info.sub_node_names):
+                    active = [sn for sn in info.sub_node_names if self.nodes[sn].intervention_value == 1.0]
+                    cat_val = active[0].removeprefix(f"{name}_") if active else "?"
+                    lines.append(f"  INTERVENED: {cat_val}")
             else:
-                lines.append(f"\n{name} (root)")
-
-            lines.append(f"  noise: {node.noise}")
-            if node.intervened:
-                lines.append(f"  INTERVENED: {node.intervention_value}")
+                node = self.nodes[name]
+                parents = self.get_parents(name)
+                if parents:
+                    # Resolve sub-node parents to categorical names for display
+                    display_parents = []
+                    for p in parents:
+                        owner = self.get_categorical_owner(p)
+                        display_parents.append(owner if owner else p)
+                    parent_str = ", ".join(dict.fromkeys(display_parents))
+                    lines.append(f"\n{name} <- {parent_str}")
+                    for edge in self.edges[name]:
+                        lines.append(f"  {edge.source}: weight={edge.weight}, transform={edge.transform}")
+                else:
+                    lines.append(f"\n{name} (root)")
+                lines.append(f"  noise: {node.noise}")
+                if node.intervened:
+                    lines.append(f"  INTERVENED: {node.intervention_value}")
 
         return "\n".join(lines)
 
     def show_equations(self) -> str:
         """Return the structural equations in mathematical notation."""
-        order = self._compute_topological_order()
         lines = ["Structural Equations:", "=" * 40]
 
-        for name in order:
-            node = self.nodes[name]
+        for name in self._get_user_facing_order():
+            if self.is_categorical(name):
+                info = self.categorical_nodes[name]
+                has_parents = any(len(self.edges.get(sn, [])) > 0 for sn in info.sub_node_names)
 
-            if node.intervened:
-                lines.append(f"{name} = {node.intervention_value}  [intervened]")
-                continue
-
-            incoming_edges = self.edges.get(name, [])
-
-            if not incoming_edges:
-                # Root node: just noise
-                lines.append(f"{name} = {node.noise.math_notation()}")
+                # Check intervention
+                if any(self.nodes[sn].intervened for sn in info.sub_node_names):
+                    active = [
+                        cat
+                        for sn, cat in zip(info.sub_node_names, info.categories, strict=True)
+                        if self.nodes[sn].intervention_value == 1.0
+                    ]
+                    lines.append(f"{name} = {active[0] if active else '?'}  [intervened]")
+                elif not has_parents:
+                    # Root categorical
+                    prob_parts = [
+                        f"{cat}={p:.2f}" for cat, p in zip(info.categories, info.probabilities or [], strict=True)
+                    ]
+                    lines.append(f"{name} ~ Multinomial({', '.join(prob_parts)})")
+                else:
+                    # Child categorical: show score equations + softmax
+                    score_lines = []
+                    for cat, sub_name in zip(info.categories, info.sub_node_names, strict=True):
+                        edges = self.edges.get(sub_name, [])
+                        terms = []
+                        for edge in edges:
+                            transformed = edge.transform.math_notation(edge.source)
+                            if edge.weight == 1.0:
+                                terms.append(transformed)
+                            elif edge.weight == -1.0:
+                                terms.append(f"-{transformed}")
+                            else:
+                                terms.append(f"{edge.weight:.2f} * {transformed}")
+                        score_lines.append(f"  score_{cat} = {' + '.join(terms)}")
+                    lines.append(f"{name} ~ Softmax(scores)  where:")
+                    lines.extend(score_lines)
             else:
-                # Build equation: sum of parent contributions + noise
-                terms = []
-                for edge in incoming_edges:
-                    transformed = edge.transform.math_notation(edge.source)
-                    if edge.weight == 1.0:
-                        terms.append(transformed)
-                    elif edge.weight == -1.0:
-                        terms.append(f"-{transformed}")
-                    else:
-                        terms.append(f"{edge.weight:.2f} * {transformed}")
-                equation = " + ".join(terms)
-                lines.append(f"{name} = {equation} + {node.noise.math_notation()}")
+                node = self.nodes[name]
+
+                if node.intervened:
+                    lines.append(f"{name} = {node.intervention_value}  [intervened]")
+                    continue
+
+                incoming_edges = self.edges.get(name, [])
+
+                if not incoming_edges:
+                    lines.append(f"{name} = {node.noise.math_notation()}")
+                else:
+                    terms = []
+                    for edge in incoming_edges:
+                        transformed = edge.transform.math_notation(edge.source)
+                        if edge.weight == 1.0:
+                            terms.append(transformed)
+                        elif edge.weight == -1.0:
+                            terms.append(f"-{transformed}")
+                        else:
+                            terms.append(f"{edge.weight:.2f} * {transformed}")
+                    equation = " + ".join(terms)
+                    lines.append(f"{name} = {equation} + {node.noise.math_notation()}")
 
         return "\n".join(lines)
 

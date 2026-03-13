@@ -14,6 +14,9 @@ Example usage:
     >>> data = generator.sample(n=1000)
 """
 
+from .categorical import (
+    CategoricalNodeInfo,
+)
 from .classification import (
     ClassificationDataGenerator,
     FeatureSpec,
@@ -60,6 +63,8 @@ from .transforms import (
 
 __all__ = [
     "DAG",
+    # Categorical
+    "CategoricalNodeInfo",
     "ClassificationDataGenerator",
     "CompositeTransform",
     "CustomTransform",
